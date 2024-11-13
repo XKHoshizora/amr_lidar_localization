@@ -44,7 +44,7 @@ void initialPoseCallback(const geometry_msgs::PoseWithCovarianceStamped::ConstPt
         static tf2_ros::TransformListener tfListener(tfBuffer);
 
         // 1. 查询从 base_frame 到 laser_frame 的转换
-        geometry_msgs::TransformStamped transformStamped = 
+        geometry_msgs::TransformStamped transformStamped =
             tfBuffer.lookupTransform(base_frame, laser_frame, ros::Time(0), ros::Duration(1.0));
 
         // 2. 创建一个 stamped pose 用于转换
@@ -63,7 +63,7 @@ void initialPoseCallback(const geometry_msgs::PoseWithCovarianceStamped::ConstPt
             laser_pose.pose.orientation.y,
             laser_pose.pose.orientation.z,
             laser_pose.pose.orientation.w);
-        
+
         // 5. 将四元数转换为yaw角度
         tf2::Matrix3x3 m(q);
         double roll, pitch, yaw;
@@ -72,12 +72,12 @@ void initialPoseCallback(const geometry_msgs::PoseWithCovarianceStamped::ConstPt
         // 6. 将地图坐标转换为裁切后的地图坐标
         lidar_x = (x - map_msg.info.origin.position.x) / map_msg.info.resolution - map_roi_info.x_offset;
         lidar_y = (y - map_msg.info.origin.position.y) / map_msg.info.resolution - map_roi_info.y_offset;
-        
+
         // 7. 设置yaw角度
         lidar_yaw = -yaw;
         clear_countdown = 30;
     }
-    catch (tf2::TransformException &ex) 
+    catch (tf2::TransformException &ex)
     {
         ROS_WARN("无法获取从 %s 到 %s 的转换: %s", base_frame.c_str(), laser_frame.c_str(), ex.what());
     }
@@ -90,7 +90,7 @@ void mapCallback(const nav_msgs::OccupancyGrid::ConstPtr& msg)
 {
     map_msg = *msg;
     crop_map();
-    processMap();        
+    processMap();
 }
 
 void crop_map()
@@ -98,7 +98,7 @@ void crop_map()
     // 显示地图信息
     std_msgs::Header header = map_msg.header;
     nav_msgs::MapMetaData info = map_msg.info;
-    
+
     //用来统计地图有效区域的变量
     int xMax,xMin,yMax,yMin ;
     xMax=xMin= info.width/2;
@@ -113,7 +113,7 @@ void crop_map()
         for(int x = 0; x < info.width; x++)
         {
             int index = y * info.width + x;
-            
+
             // 直接使用map_msg.data中的值
             map_raw.at<uchar>(y, x) = static_cast<uchar>(map_msg.data[index]);
 
@@ -156,7 +156,7 @@ void crop_map()
 
     map_cropped = roi_map;
 
-    // 地图的裁减信息 
+    // 地图的裁减信息
     map_roi_info.x_offset = new_origin_x;
     map_roi_info.y_offset = new_origin_y;
     map_roi_info.width = new_width;
@@ -199,7 +199,7 @@ void scanCallback(const sensor_msgs::LaserScan::ConstPtr& msg)
         {
             // 计算三种情况下的雷达点坐标数组
             std::vector<cv::Point2f> transform_points, clockwise_points, counter_points;
-            
+
             int max_sum = 0;
             float best_dx = 0, best_dy = 0, best_dyaw = 0;
 
@@ -288,13 +288,13 @@ bool check(float x, float y, float yaw)
     data_queue.push_back(std::make_tuple(x, y, yaw));
 
     // 如果队列超过最大大小，移除最旧的数据
-    if (data_queue.size() > max_size) 
+    if (data_queue.size() > max_size)
     {
         data_queue.pop_front();
     }
 
     // 如果队列已满，检查第一个和最后一个元素
-    if (data_queue.size() == max_size) 
+    if (data_queue.size() == max_size)
     {
         auto& first = data_queue.front();
         auto& last = data_queue.back();
@@ -432,7 +432,7 @@ void pose_tf()
 int main(int argc, char** argv)
 {
     setlocale(LC_ALL,"");
-    ros::init(argc, argv, "lidar_loc");
+    ros::init(argc, argv, "lidar_localization");
 
     // 读取参数
     ros::NodeHandle private_nh("~");

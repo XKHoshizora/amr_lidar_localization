@@ -16,10 +16,10 @@
   <node name="tea_table" pkg="gazebo_ros" type="spawn_model" args="-file $(find wpr_simulation)/models/tea_table.model -x -2.1 -y -2.2 -z 0 -Y 1.57 -urdf -model tea_table" />
   <node name="bookshelft" pkg="gazebo_ros" type="spawn_model" args="-file $(find wpr_simulation)/models/bookshelft.model -x 2.0 -y -0.55 -z 0 -Y -1.57 -urdf -model bookshelft" />
 
-  <node name="kitchen_table" pkg="gazebo_ros" type="spawn_model" args="-file $(find wpr_simulation)/models/table.model -x -3.5 -y 3.7 -z 0 -Y 1.57 -urdf -model kitchen_table" /> 
+  <node name="kitchen_table" pkg="gazebo_ros" type="spawn_model" args="-file $(find wpr_simulation)/models/table.model -x -3.5 -y 3.7 -z 0 -Y 1.57 -urdf -model kitchen_table" />
 
   <node name="cupboard_0" pkg="gazebo_ros" type="spawn_model" args="-file $(find wpr_simulation)/models/cupboard.model -x -2.0 -y 0.7 -z 0 -Y 1.57 -urdf -model cupboard_0" />
-  <node name="cupboard_1" pkg="gazebo_ros" type="spawn_model" args="-file $(find wpr_simulation)/models/cupboard.model -x -1.3 -y 3.7 -z 0 -Y -1.57 -urdf -model cupboard_1" /> 
+  <node name="cupboard_1" pkg="gazebo_ros" type="spawn_model" args="-file $(find wpr_simulation)/models/cupboard.model -x -1.3 -y 3.7 -z 0 -Y -1.57 -urdf -model cupboard_1" />
 
   <node name="dinning_table_0" pkg="gazebo_ros" type="spawn_model" args="-file $(find wpr_simulation)/models/table.model -x 1.5 -y 1.5 -z 0 -Y 1.57 -urdf -model dinning_table_0" />
   <node name="dinning_table_1" pkg="gazebo_ros" type="spawn_model" args="-file $(find wpr_simulation)/models/table.model -x 1.5 -y 2.0 -z 0 -Y 1.57 -urdf -model dinning_table_1" />
@@ -37,8 +37,8 @@
   <!-- Run the map server -->
   <node name="map_server" pkg="map_server" type="map_server" args="$(find wpr_simulation)/maps/map.yaml"/>
 
-  <!-- Run lidar_loc -->
-  <node pkg="jie_ware" type="lidar_loc" name="lidar_loc" >
+  <!-- Run lidar_localization -->
+  <node pkg="amr_lidar_localization" type="lidar_localization" name="amr_lidar_localization" >
     <param name="base_frame" value="base_footprint" />
     <param name="odom_frame" value="odom" />
     <param name="laser_frame" value="laser" />
@@ -52,7 +52,7 @@
     <rosparam file="$(find wpb_home_tutorials)/nav_lidar/local_costmap_params.yaml" command="load" />
     <rosparam file="$(find wpb_home_tutorials)/nav_lidar/global_costmap_params.yaml" command="load" />
     <rosparam file="$(find wpb_home_tutorials)/nav_lidar/local_planner_params.yaml" command="load" />
-    <param name="base_global_planner" value="global_planner/GlobalPlanner" /> 
+    <param name="base_global_planner" value="global_planner/GlobalPlanner" />
     <param name="use_dijkstra" value="true"/>
     <param name="base_local_planner" value="wpbh_local_planner/WpbhLocalPlanner" />
     <param name= "controller_frequency" value="10" type="double"/>

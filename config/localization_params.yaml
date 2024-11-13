@@ -1,0 +1,78 @@
+laser_localization:
+    # 地图参数
+    map:
+        resolution: 0.05      # 地图分辨率(m/pixel)
+        update_rate: 1.0      # 更新频率(Hz)
+        occupied_thresh: 0.65 # 占用阈值
+        free_thresh: 0.196    # 空闲阈值
+
+    # 粒子滤波参数
+    particle_filter:
+        num_particles: 1000
+        resample_threshold: 0.5
+        diversity_threshold: 2.0
+        min_effective_particles_ratio: 0.1
+
+        # 噪声参数
+        initial_noise:
+            x: 0.5     # meters
+            y: 0.5     # meters
+            yaw: 0.2   # radians
+        motion_noise:
+            x: 0.1     # meters
+            y: 0.1     # meters
+            yaw: 0.05  # radians
+
+        # 扫描匹配参数
+        scan_matching:
+            sigma: 0.2            # 似然计算标准差
+            resolution: 0.05      # 采样分辨率(m)
+            max_range: 20.0       # 最大有效激光距离(m)
+            angle_increment: 0.25 # 角度增量(度)
+
+    # 激光雷达参数
+    laser:
+        max_range: 20.0       # meters
+        min_range: 0.1        # meters
+        angle_increment: 0.25 # degrees
+
+    # 定位参数
+    localization:
+        transform_tolerance: 0.1  # seconds
+        update_min_d: 0.1        # meters
+        update_min_a: 0.1        # radians
+
+    # 恢复机制参数
+    recovery:
+        max_failures: 3
+        recovery_timeout: 5.0
+        min_effective_particles: 100
+        recovery_particle_count: 200
+
+    # 健康监控参数
+    health_monitoring:
+        check_interval: 1.0          # 健康检查间隔(s)
+        degraded_mode_timeout: 30.0  # 降级模式超时(s)
+        max_position_jump: 1.0       # 最大位置跳变(m)
+        max_rotation_jump: 1.57      # 最大角度跳变(rad)
+
+    # 可视化参数
+    visualization:
+        publish_particles: true
+        publish_likelihood: true
+        particle_size: 0.05     # 粒子可视化大小(m)
+        arrow_length: 0.2       # 方向箭头长度(m)
+        covariance_alpha: 0.3   # 协方差椭圆透明度
+
+    # 并行计算参数
+    parallel:
+        enable_openmp: true
+        thread_count: 4         # 线程数量
+        chunk_size: 100         # OpenMP任务块大小
+
+    # 日志参数
+    logging:
+        log_level: info  # debug, info, warn, error
+        log_to_file: false
+        log_path: ""
+        max_log_size: 100  # MB

@@ -1,0 +1,60 @@
+<?xml version="1.0"?>
+<launch>
+    <!-- Arguments -->
+    <arg name="debug" default="false"/>
+    <arg name="config_file" default="$(find amr_lidar_localization)/config/localization_params.yaml"/>
+    <arg name="rviz_config" default="$(find amr_lidar_localization)/config/rviz_config.rviz"/>
+    <arg name="use_sim_time" default="false"/>
+
+    <!-- Set use_sim_time parameter -->
+    <param name="/use_sim_time" value="$(arg use_sim_time)"/>
+
+    <!-- Load parameters -->
+    <rosparam command="load" file="$(arg config_file)"/>
+
+    <!-- Start localization node -->
+    <node pkg="amr_lidar_localization" type="laser_localization"
+          name="laser_localization" output="screen" respawn="true">
+        <!-- Debug settings -->
+        <param name="debug" value="$(arg debug)"/>
+
+        <!-- OpenMP settings -->
+        <param name="parallel/enable_openmp" value="true"/>
+        <param name="parallel/thread_count" value="4"/>
+
+        <!-- Frame IDs -->
+        <param name="frame_ids/base" value="base_footprint"/>
+        <param name="frame_ids/odom" value="odom"/>
+        <param name="frame_ids/map" value="map"/>
+        <param name="frame_ids/laser" value="laser"/>
+
+        <!-- Remappings -->
+        <remap from="scan" to="scan"/>
+        <remap from="map" to="map"/>
+        <remap from="initialpose" to="initialpose"/>
+
+        <!-- TF Remappings -->
+        <remap from="tf" to="tf"/>
+        <remap from="tf_static" to="tf_static"/>
+    </node>
+
+    <!-- Start RViz for visualization -->
+    <node pkg="rviz" type="rviz" name="rviz"
+          args="-d $(arg rviz_config)" if="$(arg debug)"/>
+
+    <!-- Optional: Record statistics -->
+    <node pkg="rosbag" type="record" name="rosbag_record_localization"
+          args="record -o $(find amr_lidar_localization)/bags/localization_stats
+                /laser_localization/pose
+                /laser_localization/particles
+                /laser_localization/likelihood_field
+                /laser_localization/diagnostics
+                /tf
+                /tf_static"
+          if="$(arg debug)"/>
+
+    <!-- Optional: Start map server if map_file is provided -->
+    <arg name="map_file" default="" />
+    <node pkg="map_server" type="map_server" name="map_server"
+          args="$(arg map_file)" if="$(eval map_file != '')" />
+</launch>
