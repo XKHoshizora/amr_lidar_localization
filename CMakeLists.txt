@@ -280,11 +280,3 @@ install(DIRECTORY config/
 
 # # Add folders to be run by python nosetests
 # catkin_add_nosetests(test)
-add_executable(lidar_localization
-    src/lidar_localization.cpp
-)
-add_dependencies(lidar_localization ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-target_link_libraries(lidar_localization
-    ${catkin_LIBRARIES}
-    ${OpenCV_LIBS}
-)
