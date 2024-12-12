@@ -429,12 +429,15 @@ bool LidarLocator::check(float x, float y, float yaw)
 void LidarLocator::poseTF()
 {
     if (scan_count_ == 0 || !map_received_) {
+        ROS_DEBUG_THROTTLE(1.0, "Skipping poseTF: scan_count_=%d, map_received_=%d",
+                          scan_count_, map_received_);
         return;
     }
 
     try {
         // 等待必要的转换可用
         if (!waitForTransform(odom_frame_, laser_frame_, ros::Time(0), ros::Duration(0.1))) {
+            ROS_DEBUG_THROTTLE(1.0, "Transform not ready yet");
             return;
         }
 
@@ -451,17 +454,15 @@ void LidarLocator::poseTF()
         tf2::Quaternion q;
         q.setRPY(0, 0, yaw_ros);
 
-        // 计算base在map中的位置
-        double base_x = x_meters;
-        double base_y = y_meters;
+        ROS_DEBUG("Publishing transform: x=%.3f, y=%.3f, yaw=%.3f", x_meters, y_meters, yaw_ros);
 
-        // 获取odom到base的转换
+        // 计算base在map中的位置
         geometry_msgs::TransformStamped odom_to_base =
             tf_buffer_.lookupTransform(odom_frame_, laser_frame_, ros::Time(0));
 
         // 计算map到odom的转换
         tf2::Transform map_to_base, odom_to_base_tf2;
-        map_to_base.setOrigin(tf2::Vector3(base_x, base_y, 0));
+        map_to_base.setOrigin(tf2::Vector3(x_meters, y_meters, 0));
         map_to_base.setRotation(q);
 
         tf2::fromMsg(odom_to_base.transform, odom_to_base_tf2);
@@ -475,6 +476,7 @@ void LidarLocator::poseTF()
         map_to_odom_msg.transform = tf2::toMsg(map_to_odom);
 
         tf_broadcaster_.sendTransform(map_to_odom_msg);
+        ROS_DEBUG_THROTTLE(1.0, "Transform published successfully");
 
     } catch (const tf2::TransformException& ex) {
         ROS_WARN_THROTTLE(1.0, "Transform failure: %s", ex.what());
