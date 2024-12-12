@@ -218,8 +218,11 @@ void LidarLocator::cropMap()
         yMax = yMin = info.height/2;
         bool bFirstPoint = true;
 
+        // 创建原始地图矩阵
         cv::Mat map_raw(info.height, info.width, CV_8UC1, cv::Scalar(128));
+        ROS_INFO("Created raw map matrix: %dx%d", map_raw.rows, map_raw.cols);
 
+        // 填充原始地图数据
         for(int y = 0; y < info.height; y++) {
             for(int x = 0; x < info.width; x++) {
                 int index = y * info.width + x;
@@ -255,9 +258,16 @@ void LidarLocator::cropMap()
         new_origin_y = std::max(0, new_origin_y);
         new_height = std::min(new_height, static_cast<int>(info.height - new_origin_y));
 
-        cv::Rect roi(new_origin_x, new_origin_y, new_width, new_height);
-        map_cropped_ = map_raw(roi).clone();
+        ROS_INFO("Cropping map with roi: x=%d, y=%d, w=%d, h=%d",
+                 new_origin_x, new_origin_y, new_width, new_height);
 
+        cv::Rect roi(new_origin_x, new_origin_y, new_width, new_height);
+        // 注意：这里直接使用ROI进行赋值
+        map_cropped_ = map_raw(roi);
+
+        ROS_INFO("Created cropped map: %dx%d", map_cropped_.rows, map_cropped_.cols);
+
+        // 保存ROI信息
         map_roi_info_.x_offset = new_origin_x;
         map_roi_info_.y_offset = new_origin_y;
         map_roi_info_.width = new_width;
@@ -265,7 +275,10 @@ void LidarLocator::cropMap()
 
         ROS_INFO("Map cropped successfully");
         ROS_INFO("Map cropped: origin(%d,%d) size(%d,%d)",
-                 new_origin_x, new_origin_y, new_width, new_height);
+                 map_roi_info_.x_offset, map_roi_info_.y_offset,
+                 map_roi_info_.width, map_roi_info_.height);
+    } catch (const cv::Exception& e) {
+        ROS_ERROR("OpenCV error in cropMap: %s", e.what());
     } catch (const std::exception& e) {
         ROS_ERROR("Error in cropMap: %s", e.what());
     }
@@ -307,8 +320,9 @@ void LidarLocator::processMap()
     }
 
     try {
-        ROS_INFO("Creating zero matrix of size %dx%d", map_cropped_.rows, map_cropped_.cols);
+        ROS_INFO("Cropped map size: %dx%d", map_cropped_.rows, map_cropped_.cols);
         map_temp_ = cv::Mat::zeros(map_cropped_.size(), CV_8UC1);
+        ROS_INFO("Created temp matrix size: %dx%d", map_temp_.rows, map_temp_.cols);
 
         ROS_INFO("Creating gradient mask");
         cv::Mat gradient_mask = createGradientMask(101);
@@ -316,8 +330,7 @@ void LidarLocator::processMap()
             ROS_ERROR("Failed to create gradient mask");
             return;
         }
-
-        ROS_INFO("Processing map with dimensions: %dx%d", map_cropped_.rows, map_cropped_.cols);
+        ROS_INFO("Created gradient mask size: %dx%d", gradient_mask.rows, gradient_mask.cols);
 
         for (int y = 0; y < map_cropped_.rows; y++) {
             for (int x = 0; x < map_cropped_.cols; x++) {
