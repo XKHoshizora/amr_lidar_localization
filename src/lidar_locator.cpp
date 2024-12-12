@@ -99,6 +99,8 @@ void LidarLocator::scanCallback(const sensor_msgs::LaserScan::ConstPtr& msg)
             return;
         }
 
+        ROS_DEBUG_THROTTLE(1.0, "Processing scan with %zu points", msg->ranges.size());
+
         scan_points_.clear();
         double angle = msg->angle_min;
         for (size_t i = 0; i < msg->ranges.size(); ++i) {
@@ -109,22 +111,23 @@ void LidarLocator::scanCallback(const sensor_msgs::LaserScan::ConstPtr& msg)
             }
             angle += msg->angle_increment;
         }
+        ROS_DEBUG_THROTTLE(1.0, "Valid scan points: %d", valid_points);
 
         if (scan_count_ == 0) {
             scan_count_++;
+            ROS_INFO("First scan received and processed");
         }
 
         processLidarData();
 
+        // 更新清除代价地图的倒计时
         if (clear_countdown_ > -1) {
             clear_countdown_--;
-        }
-        if (clear_countdown_ == 0) {
-            std_srvs::Empty srv;
-            if (clear_costmaps_client_.call(srv)) {
-                ROS_INFO("Costmaps cleared successfully");
-            } else {
-                ROS_WARN("Failed to clear costmaps");
+            if (clear_countdown_ == 0) {
+                std_srvs::Empty srv;
+                if (clear_costmaps_client_.call(srv)) {
+                    ROS_INFO("Costmaps cleared successfully");
+                }
             }
         }
 
@@ -138,6 +141,8 @@ void LidarLocator::processLidarData()
     if (map_cropped_.empty() || scan_points_.empty()) {
         return;
     }
+
+    ROS_DEBUG_THROTTLE(1.0, "Processing lidar data with %zu points", scan_points_.size());
 
     while (ros::ok()) {
         std::vector<cv::Point2f> transform_points, clockwise_points, counter_points;
@@ -193,7 +198,10 @@ void LidarLocator::processLidarData()
         lidar_y_ += best_dy;
         lidar_yaw_ += best_dyaw;
 
+        ROS_DEBUG_THROTTLE(1.0, "Current pose: x=%.2f, y=%.2f, yaw=%.2f", lidar_x_, lidar_y_, lidar_yaw_);
+
         if (check(lidar_x_, lidar_y_, lidar_yaw_)) {
+            ROS_DEBUG("Position stabilized");
             break;
         }
     }
