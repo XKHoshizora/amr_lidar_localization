@@ -103,11 +103,14 @@ void LidarLocator::scanCallback(const sensor_msgs::LaserScan::ConstPtr& msg)
 
         scan_points_.clear();
         double angle = msg->angle_min;
+        int valid_points = 0;
+
         for (size_t i = 0; i < msg->ranges.size(); ++i) {
             if (msg->ranges[i] >= msg->range_min && msg->ranges[i] <= msg->range_max) {
                 float x = msg->ranges[i] * cos(angle) / map_msg_.info.resolution;
                 float y = -msg->ranges[i] * sin(angle) / map_msg_.info.resolution;
                 scan_points_.push_back(cv::Point2f(x, y));
+                valid_points++;
             }
             angle += msg->angle_increment;
         }
