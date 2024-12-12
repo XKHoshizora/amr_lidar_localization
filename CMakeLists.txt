@@ -17,6 +17,7 @@ find_package(catkin REQUIRED COMPONENTS
   sensor_msgs
   std_msgs
   tf2
+  tf2_ros
 )
 
 ## System dependencies are found with CMake's conventions
@@ -111,7 +112,7 @@ find_package(OpenCV REQUIRED)
 catkin_package(
   INCLUDE_DIRS include
 #  LIBRARIES amr_lidar_localization
-  CATKIN_DEPENDS cv_bridge geometry_msgs move_base_msgs nav_msgs roscpp rospy sensor_msgs std_msgs tf2
+  CATKIN_DEPENDS cv_bridge geometry_msgs move_base_msgs nav_msgs roscpp rospy sensor_msgs std_msgs tf2 tf2_ros
 #  DEPENDS system_lib
 )
 
