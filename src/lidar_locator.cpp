@@ -29,11 +29,18 @@ LidarLocator::LidarLocator()
 void LidarLocator::mapCallback(const nav_msgs::OccupancyGrid::ConstPtr& msg)
 {
     try {
+        ROS_INFO("Received map message, size: %dx%d", msg->info.width, msg->info.height);
+
+        if (msg->data.empty()) {
+            ROS_ERROR("Received empty map data");
+            return;
+        }
+
         map_msg_ = *msg;
         cropMap();
         processMap();
         map_received_ = true;
-        ROS_INFO("Map received and processed");
+        ROS_INFO("Map processed successfully");
     } catch (const std::exception& e) {
         ROS_ERROR("Error in mapCallback: %s", e.what());
     }
@@ -197,63 +204,71 @@ void LidarLocator::processLidarData()
 
 void LidarLocator::cropMap()
 {
+    ROS_INFO("Starting cropMap");
+
     if (map_msg_.data.empty()) {
-        ROS_WARN("Empty map data received");
+        ROS_ERROR("Empty map data in cropMap");
         return;
     }
 
-    nav_msgs::MapMetaData info = map_msg_.info;
-    int xMax, xMin, yMax, yMin;
-    xMax = xMin = info.width/2;
-    yMax = yMin = info.height/2;
-    bool bFirstPoint = true;
+    try {
+        nav_msgs::MapMetaData info = map_msg_.info;
+        int xMax, xMin, yMax, yMin;
+        xMax = xMin = info.width/2;
+        yMax = yMin = info.height/2;
+        bool bFirstPoint = true;
 
-    cv::Mat map_raw(info.height, info.width, CV_8UC1, cv::Scalar(128));
+        cv::Mat map_raw(info.height, info.width, CV_8UC1, cv::Scalar(128));
 
-    for(int y = 0; y < info.height; y++) {
-        for(int x = 0; x < info.width; x++) {
-            int index = y * info.width + x;
-            map_raw.at<uchar>(y, x) = static_cast<uchar>(map_msg_.data[index]);
+        for(int y = 0; y < info.height; y++) {
+            for(int x = 0; x < info.width; x++) {
+                int index = y * info.width + x;
+                map_raw.at<uchar>(y, x) = static_cast<uchar>(map_msg_.data[index]);
 
-            if(map_msg_.data[index] == 100) {
-                if(bFirstPoint) {
-                    xMax = xMin = x;
-                    yMax = yMin = y;
-                    bFirstPoint = false;
-                    continue;
+                if(map_msg_.data[index] == 100) {
+                    if(bFirstPoint) {
+                        xMax = xMin = x;
+                        yMax = yMin = y;
+                        bFirstPoint = false;
+                        continue;
+                    }
+                    xMin = std::min(xMin, x);
+                    xMax = std::max(xMax, x);
+                    yMin = std::min(yMin, y);
+                    yMax = std::max(yMax, y);
                 }
-                xMin = std::min(xMin, x);
-                xMax = std::max(xMax, x);
-                yMin = std::min(yMin, y);
-                yMax = std::max(yMax, y);
             }
         }
+
+        int cen_x = (xMin + xMax)/2;
+        int cen_y = (yMin + yMax)/2;
+
+        int new_half_width = abs(xMax - xMin)/2 + 50;
+        int new_half_height = abs(yMax - yMin)/2 + 50;
+        int new_origin_x = cen_x - new_half_width;
+        int new_origin_y = cen_y - new_half_height;
+        int new_width = new_half_width*2;
+        int new_height = new_half_height*2;
+
+        new_origin_x = std::max(0, new_origin_x);
+        new_width = std::min(new_width, static_cast<int>(info.width - new_origin_x));
+        new_origin_y = std::max(0, new_origin_y);
+        new_height = std::min(new_height, static_cast<int>(info.height - new_origin_y));
+
+        cv::Rect roi(new_origin_x, new_origin_y, new_width, new_height);
+        map_cropped_ = map_raw(roi).clone();
+
+        map_roi_info_.x_offset = new_origin_x;
+        map_roi_info_.y_offset = new_origin_y;
+        map_roi_info_.width = new_width;
+        map_roi_info_.height = new_height;
+
+        ROS_INFO("Map cropped successfully");
+        ROS_INFO("Map cropped: origin(%d,%d) size(%d,%d)",
+                 new_origin_x, new_origin_y, new_width, new_height);
+    } catch (const std::exception& e) {
+        ROS_ERROR("Error in cropMap: %s", e.what());
     }
-
-    int cen_x = (xMin + xMax)/2;
-    int cen_y = (yMin + yMax)/2;
-
-    int new_half_width = abs(xMax - xMin)/2 + 50;
-    int new_half_height = abs(yMax - yMin)/2 + 50;
-    int new_origin_x = cen_x - new_half_width;
-    int new_origin_y = cen_y - new_half_height;
-    int new_width = new_half_width*2;
-    int new_height = new_half_height*2;
-
-    new_origin_x = std::max(0, new_origin_x);
-    new_width = std::min(new_width, static_cast<int>(info.width - new_origin_x));
-    new_origin_y = std::max(0, new_origin_y);
-    new_height = std::min(new_height, static_cast<int>(info.height - new_origin_y));
-
-    cv::Rect roi(new_origin_x, new_origin_y, new_width, new_height);
-    map_cropped_ = map_raw(roi).clone();
-
-    map_roi_info_.x_offset = new_origin_x;
-    map_roi_info_.y_offset = new_origin_y;
-    map_roi_info_.width = new_width;
-    map_roi_info_.height = new_height;
-
-    ROS_INFO("Map cropped successfully");
 }
 
 cv::Mat LidarLocator::createGradientMask(int size)
@@ -272,33 +287,40 @@ cv::Mat LidarLocator::createGradientMask(int size)
 
 void LidarLocator::processMap()
 {
+    ROS_INFO("Starting processMap");
+
     if (map_cropped_.empty()) {
-        ROS_WARN("Empty cropped map, skipping processing");
+        ROS_ERROR("Empty cropped map in processMap");
         return;
     }
 
-    map_temp_ = cv::Mat::zeros(map_cropped_.size(), CV_8UC1);
-    cv::Mat gradient_mask = createGradientMask(101);
+    try {
+        map_temp_ = cv::Mat::zeros(map_cropped_.size(), CV_8UC1);
+        cv::Mat gradient_mask = createGradientMask(101);
 
-    for (int y = 0; y < map_cropped_.rows; y++) {
-        for (int x = 0; x < map_cropped_.cols; x++) {
-            if (map_cropped_.at<uchar>(y, x) == 100) {
-                int left = std::max(0, x - 50);
-                int top = std::max(0, y - 50);
-                int right = std::min(map_cropped_.cols - 1, x + 50);
-                int bottom = std::min(map_cropped_.rows - 1, y + 50);
+        for (int y = 0; y < map_cropped_.rows; y++) {
+            for (int x = 0; x < map_cropped_.cols; x++) {
+                if (map_cropped_.at<uchar>(y, x) == 100) {
+                    int left = std::max(0, x - 50);
+                    int top = std::max(0, y - 50);
+                    int right = std::min(map_cropped_.cols - 1, x + 50);
+                    int bottom = std::min(map_cropped_.rows - 1, y + 50);
 
-                cv::Rect roi(left, top, right - left + 1, bottom - top + 1);
-                cv::Mat region = map_temp_(roi);
+                    cv::Rect roi(left, top, right - left + 1, bottom - top + 1);
+                    cv::Mat region = map_temp_(roi);
 
-                int mask_left = 50 - (x - left);
-                int mask_top = 50 - (y - top);
-                cv::Rect mask_roi(mask_left, mask_top, roi.width, roi.height);
-                cv::Mat mask = gradient_mask(mask_roi);
+                    int mask_left = 50 - (x - left);
+                    int mask_top = 50 - (y - top);
+                    cv::Rect mask_roi(mask_left, mask_top, roi.width, roi.height);
+                    cv::Mat mask = gradient_mask(mask_roi);
 
-                cv::max(region, mask, region);
+                    cv::max(region, mask, region);
+                }
             }
         }
+        ROS_INFO("Map processing complete");
+    } catch (const std::exception& e) {
+        ROS_ERROR("Error in processMap: %s", e.what());
     }
 }
 
