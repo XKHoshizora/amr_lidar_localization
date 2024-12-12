@@ -273,16 +273,28 @@ void LidarLocator::cropMap()
 
 cv::Mat LidarLocator::createGradientMask(int size)
 {
-    cv::Mat mask(size, size, CV_8UC1);
-    int center = size / 2;
-    for (int y = 0; y < size; y++) {
-        for (int x = 0; x < size; x++) {
-            double distance = std::hypot(x - center, y - center);
-            int value = cv::saturate_cast<uchar>(255 * std::max(0.0, 1.0 - distance / center));
-            mask.at<uchar>(y, x) = value;
+    try {
+        ROS_INFO("Creating gradient mask of size %dx%d", size, size);
+        cv::Mat mask(size, size, CV_8UC1);
+        int center = size / 2;
+
+        for (int y = 0; y < size; y++) {
+            for (int x = 0; x < size; x++) {
+                double distance = std::hypot(x - center, y - center);
+                int value = cv::saturate_cast<uchar>(255 * std::max(0.0, 1.0 - distance / center));
+                mask.at<uchar>(y, x) = value;
+            }
         }
+
+        ROS_INFO("Gradient mask created successfully");
+        return mask;
+    } catch (const cv::Exception& e) {
+        ROS_ERROR("OpenCV error in createGradientMask: %s", e.what());
+        return cv::Mat();
+    } catch (const std::exception& e) {
+        ROS_ERROR("Error in createGradientMask: %s", e.what());
+        return cv::Mat();
     }
-    return mask;
 }
 
 void LidarLocator::processMap()
@@ -295,22 +307,58 @@ void LidarLocator::processMap()
     }
 
     try {
+        ROS_INFO("Creating zero matrix of size %dx%d", map_cropped_.rows, map_cropped_.cols);
         map_temp_ = cv::Mat::zeros(map_cropped_.size(), CV_8UC1);
+
+        ROS_INFO("Creating gradient mask");
         cv::Mat gradient_mask = createGradientMask(101);
+        if (gradient_mask.empty()) {
+            ROS_ERROR("Failed to create gradient mask");
+            return;
+        }
+
+        ROS_INFO("Processing map with dimensions: %dx%d", map_cropped_.rows, map_cropped_.cols);
 
         for (int y = 0; y < map_cropped_.rows; y++) {
             for (int x = 0; x < map_cropped_.cols; x++) {
                 if (map_cropped_.at<uchar>(y, x) == 100) {
+                    // 计算ROI的边界，确保不会越界
                     int left = std::max(0, x - 50);
                     int top = std::max(0, y - 50);
                     int right = std::min(map_cropped_.cols - 1, x + 50);
                     int bottom = std::min(map_cropped_.rows - 1, y + 50);
 
+                    if (right < left || bottom < top) {
+                        ROS_ERROR("Invalid ROI boundaries: left=%d, right=%d, top=%d, bottom=%d",
+                                 left, right, top, bottom);
+                        continue;
+                    }
+
                     cv::Rect roi(left, top, right - left + 1, bottom - top + 1);
+                    if (!roi.width || !roi.height) {
+                        ROS_ERROR("Invalid ROI size: %dx%d", roi.width, roi.height);
+                        continue;
+                    }
+
+                    // 检查ROI是否在图像范围内
+                    if ((roi & cv::Rect(0, 0, map_temp_.cols, map_temp_.rows)) != roi) {
+                        ROS_ERROR("ROI outside image boundaries");
+                        continue;
+                    }
+
                     cv::Mat region = map_temp_(roi);
 
                     int mask_left = 50 - (x - left);
                     int mask_top = 50 - (y - top);
+
+                    // 检查mask_roi的有效性
+                    if (mask_left < 0 || mask_top < 0 ||
+                        mask_left + roi.width > gradient_mask.cols ||
+                        mask_top + roi.height > gradient_mask.rows) {
+                        ROS_ERROR("Invalid mask ROI parameters");
+                        continue;
+                    }
+
                     cv::Rect mask_roi(mask_left, mask_top, roi.width, roi.height);
                     cv::Mat mask = gradient_mask(mask_roi);
 
@@ -318,7 +366,10 @@ void LidarLocator::processMap()
                 }
             }
         }
-        ROS_INFO("Map processing complete");
+
+        ROS_INFO("Map processing completed successfully");
+    } catch (const cv::Exception& e) {
+        ROS_ERROR("OpenCV error in processMap: %s", e.what());
     } catch (const std::exception& e) {
         ROS_ERROR("Error in processMap: %s", e.what());
     }
