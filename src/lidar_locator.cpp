@@ -142,75 +142,82 @@ void LidarLocator::scanCallback(const sensor_msgs::LaserScan::ConstPtr& msg)
 void LidarLocator::processLidarData()
 {
     if (map_cropped_.empty() || scan_points_.empty()) {
+        ROS_DEBUG_THROTTLE(1.0, "No map or scan data available");
         return;
     }
 
-    ROS_DEBUG_THROTTLE(1.0, "Processing lidar data with %zu points", scan_points_.size());
+    try {
+        ROS_DEBUG_THROTTLE(1.0, "Processing lidar data with %zu points at position (%.2f, %.2f, %.2f)",
+                          scan_points_.size(), lidar_x_, lidar_y_, lidar_yaw_);
 
-    while (ros::ok()) {
-        std::vector<cv::Point2f> transform_points, clockwise_points, counter_points;
-        int max_sum = 0;
-        float best_dx = 0, best_dy = 0, best_dyaw = 0;
+        while (ros::ok()) {
+            std::vector<cv::Point2f> transform_points, clockwise_points, counter_points;
+            int max_sum = 0;
+            float best_dx = 0, best_dy = 0, best_dyaw = 0;
 
-        // 计算三种旋转情况下的点
-        for (const auto& point : scan_points_) {
-            // 原始角度
-            float rotated_x = point.x * cos(lidar_yaw_) - point.y * sin(lidar_yaw_);
-            float rotated_y = point.x * sin(lidar_yaw_) + point.y * cos(lidar_yaw_);
-            transform_points.push_back(cv::Point2f(rotated_x + lidar_x_, lidar_y_ - rotated_y));
+            // 计算三种旋转情况下的点
+            for (const auto& point : scan_points_) {
+                // 原始角度
+                float rotated_x = point.x * cos(lidar_yaw_) - point.y * sin(lidar_yaw_);
+                float rotated_y = point.x * sin(lidar_yaw_) + point.y * cos(lidar_yaw_);
+                transform_points.push_back(cv::Point2f(rotated_x + lidar_x_, lidar_y_ - rotated_y));
 
-            // 顺时针旋转
-            float clockwise_yaw = lidar_yaw_ + deg_to_rad_;
-            rotated_x = point.x * cos(clockwise_yaw) - point.y * sin(clockwise_yaw);
-            rotated_y = point.x * sin(clockwise_yaw) + point.y * cos(clockwise_yaw);
-            clockwise_points.push_back(cv::Point2f(rotated_x + lidar_x_, lidar_y_ - rotated_y));
+                // 顺时针旋转
+                float clockwise_yaw = lidar_yaw_ + deg_to_rad_;
+                rotated_x = point.x * cos(clockwise_yaw) - point.y * sin(clockwise_yaw);
+                rotated_y = point.x * sin(clockwise_yaw) + point.y * cos(clockwise_yaw);
+                clockwise_points.push_back(cv::Point2f(rotated_x + lidar_x_, lidar_y_ - rotated_y));
 
-            // 逆时针旋转
-            float counter_yaw = lidar_yaw_ - deg_to_rad_;
-            rotated_x = point.x * cos(counter_yaw) - point.y * sin(counter_yaw);
-            rotated_y = point.x * sin(counter_yaw) + point.y * cos(counter_yaw);
-            counter_points.push_back(cv::Point2f(rotated_x + lidar_x_, lidar_y_ - rotated_y));
-        }
+                // 逆时针旋转
+                float counter_yaw = lidar_yaw_ - deg_to_rad_;
+                rotated_x = point.x * cos(counter_yaw) - point.y * sin(counter_yaw);
+                rotated_y = point.x * sin(counter_yaw) + point.y * cos(counter_yaw);
+                counter_points.push_back(cv::Point2f(rotated_x + lidar_x_, lidar_y_ - rotated_y));
+            }
 
-        // 计算最佳匹配
-        std::vector<cv::Point2f> offsets = {{0,0}, {1,0}, {-1,0}, {0,1}, {0,-1}};
-        std::vector<std::vector<cv::Point2f>> point_sets = {transform_points, clockwise_points, counter_points};
-        std::vector<float> yaw_offsets = {0, deg_to_rad_, -deg_to_rad_};
+            // 计算最佳匹配
+            std::vector<cv::Point2f> offsets = {{0,0}, {1,0}, {-1,0}, {0,1}, {0,-1}};
+            std::vector<std::vector<cv::Point2f>> point_sets = {transform_points, clockwise_points, counter_points};
+            std::vector<float> yaw_offsets = {0, deg_to_rad_, -deg_to_rad_};
 
-        for (size_t i = 0; i < offsets.size(); ++i) {
-            for (size_t j = 0; j < point_sets.size(); ++j) {
-                int sum = 0;
-                for (const auto& point : point_sets[j]) {
-                    float px = point.x + offsets[i].x;
-                    float py = point.y + offsets[i].y;
-                    if (px >= 0 && px < map_temp_.cols && py >= 0 && py < map_temp_.rows) {
-                        sum += map_temp_.at<uchar>(py, px);
+            for (size_t i = 0; i < offsets.size(); ++i) {
+                for (size_t j = 0; j < point_sets.size(); ++j) {
+                    int sum = 0;
+                    for (const auto& point : point_sets[j]) {
+                        float px = point.x + offsets[i].x;
+                        float py = point.y + offsets[i].y;
+                        if (px >= 0 && px < map_temp_.cols && py >= 0 && py < map_temp_.rows) {
+                            sum += map_temp_.at<uchar>(py, px);
+                        }
+                    }
+                    if (sum > max_sum) {
+                        max_sum = sum;
+                        best_dx = offsets[i].x;
+                        best_dy = offsets[i].y;
+                        best_dyaw = yaw_offsets[j];
                     }
                 }
-                if (sum > max_sum) {
-                    max_sum = sum;
-                    best_dx = offsets[i].x;
-                    best_dy = offsets[i].y;
-                    best_dyaw = yaw_offsets[j];
-                }
+            }
+
+            // 更新位置和角度
+            lidar_x_ += best_dx;
+            lidar_y_ += best_dy;
+            lidar_yaw_ += best_dyaw;
+
+            ROS_DEBUG_THROTTLE(1.0, "Current pose: x=%.2f, y=%.2f, yaw=%.2f", lidar_x_, lidar_y_, lidar_yaw_);
+
+            if (check(lidar_x_, lidar_y_, lidar_yaw_)) {
+                ROS_DEBUG("Position stabilized");
+                break;
             }
         }
 
-        // 更新位置和角度
-        lidar_x_ += best_dx;
-        lidar_y_ += best_dy;
-        lidar_yaw_ += best_dyaw;
+        // 发布转换
+        poseTF();
 
-        ROS_DEBUG_THROTTLE(1.0, "Current pose: x=%.2f, y=%.2f, yaw=%.2f", lidar_x_, lidar_y_, lidar_yaw_);
-
-        if (check(lidar_x_, lidar_y_, lidar_yaw_)) {
-            ROS_DEBUG("Position stabilized");
-            break;
-        }
+    } catch (const std::exception& e) {
+        ROS_ERROR("Error in processLidarData: %s", e.what());
     }
-
-    // 发布转换
-    poseTF();
 }
 
 void LidarLocator::cropMap()
@@ -487,7 +494,7 @@ void LidarLocator::poseTF()
         map_to_odom_msg.transform = tf2::toMsg(map_to_odom);
 
         tf_broadcaster_.sendTransform(map_to_odom_msg);
-        ROS_DEBUG_THROTTLE(1.0, "Transform published successfully");
+        ROS_INFO_THROTTLE(1.0, "Published transform: map->%s", odom_frame_.c_str());
 
     } catch (const tf2::TransformException& ex) {
         ROS_WARN_THROTTLE(1.0, "Transform failure: %s", ex.what());
