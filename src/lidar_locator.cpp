@@ -241,9 +241,9 @@ void LidarLocator::cropMap()
     int new_height = new_half_height*2;
 
     new_origin_x = std::max(0, new_origin_x);
-    new_width = std::min(new_width, info.width - new_origin_x);
+    new_width = std::min(new_width, static_cast<int>(info.width - new_origin_x));
     new_origin_y = std::max(0, new_origin_y);
-    new_height = std::min(new_height, info.height - new_origin_y);
+    new_height = std::min(new_height, static_cast<int>(info.height - new_origin_y));
 
     cv::Rect roi(new_origin_x, new_origin_y, new_width, new_height);
     map_cropped_ = map_raw(roi).clone();

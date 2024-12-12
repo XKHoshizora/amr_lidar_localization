@@ -67,6 +67,7 @@ private:
     void initialPoseCallback(const geometry_msgs::PoseWithCovarianceStamped::ConstPtr& msg);
 
     // 辅助函数
+    void processLidarData();
     void cropMap();
     void processMap();
     bool check(float x, float y, float yaw);
