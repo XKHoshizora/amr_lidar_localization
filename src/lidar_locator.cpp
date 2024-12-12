@@ -321,66 +321,75 @@ void LidarLocator::processMap()
 
     try {
         ROS_INFO("Cropped map size: %dx%d", map_cropped_.rows, map_cropped_.cols);
-        map_temp_ = cv::Mat::zeros(map_cropped_.size(), CV_8UC1);
-        ROS_INFO("Created temp matrix size: %dx%d", map_temp_.rows, map_temp_.cols);
 
-        ROS_INFO("Creating gradient mask");
-        cv::Mat gradient_mask = createGradientMask(101);
+        // 检查内存需求
+        size_t required_memory = map_cropped_.rows * map_cropped_.cols * sizeof(uchar);
+        ROS_INFO("Required memory for temp matrix: %zu bytes", required_memory);
+
+        // 分步创建矩阵以便于调试
+        cv::Size mat_size = map_cropped_.size();
+        ROS_INFO("Attempting to create matrix of size %dx%d", mat_size.height, mat_size.width);
+
+        try {
+            map_temp_.create(mat_size, CV_8UC1);
+            map_temp_.setTo(cv::Scalar(0));
+            ROS_INFO("Created temp matrix successfully");
+        } catch (const cv::Exception& e) {
+            ROS_ERROR("Failed to create temp matrix: %s", e.what());
+            return;
+        }
+
+        // 创建较小的渐变掩码
+        int mask_size = 51; // 减小掩码大小以节省内存
+        ROS_INFO("Creating gradient mask of size %dx%d", mask_size, mask_size);
+        cv::Mat gradient_mask = createGradientMask(mask_size);
         if (gradient_mask.empty()) {
             ROS_ERROR("Failed to create gradient mask");
             return;
         }
-        ROS_INFO("Created gradient mask size: %dx%d", gradient_mask.rows, gradient_mask.cols);
+        ROS_INFO("Created gradient mask successfully");
 
-        for (int y = 0; y < map_cropped_.rows; y++) {
+        int half_mask = mask_size / 2;
+
+        // 分批处理地图以减少内存使用
+        int batch_size = 100;
+        for (int y = 0; y < map_cropped_.rows; y += batch_size) {
+            int current_batch = std::min(batch_size, map_cropped_.rows - y);
+            ROS_INFO_THROTTLE(1.0, "Processing batch at row %d of %d", y, map_cropped_.rows);
+
             for (int x = 0; x < map_cropped_.cols; x++) {
-                if (map_cropped_.at<uchar>(y, x) == 100) {
-                    // 计算ROI的边界，确保不会越界
-                    int left = std::max(0, x - 50);
-                    int top = std::max(0, y - 50);
-                    int right = std::min(map_cropped_.cols - 1, x + 50);
-                    int bottom = std::min(map_cropped_.rows - 1, y + 50);
+                for (int by = y; by < y + current_batch; by++) {
+                    if (map_cropped_.at<uchar>(by, x) == 100) {
+                        // 计算ROI边界
+                        int left = std::max(0, x - half_mask);
+                        int top = std::max(0, by - half_mask);
+                        int right = std::min(map_cropped_.cols - 1, x + half_mask);
+                        int bottom = std::min(map_cropped_.rows - 1, by + half_mask);
 
-                    if (right < left || bottom < top) {
-                        ROS_ERROR("Invalid ROI boundaries: left=%d, right=%d, top=%d, bottom=%d",
-                                 left, right, top, bottom);
-                        continue;
+                        cv::Rect roi(left, top, right - left + 1, bottom - top + 1);
+                        if (roi.width <= 0 || roi.height <= 0) {
+                            continue;
+                        }
+
+                        try {
+                            cv::Mat region = map_temp_(roi);
+                            int mask_left = half_mask - (x - left);
+                            int mask_top = half_mask - (by - top);
+                            cv::Rect mask_roi(mask_left, mask_top, roi.width, roi.height);
+                            cv::Mat mask = gradient_mask(mask_roi);
+                            cv::max(region, mask, region);
+                        } catch (const cv::Exception& e) {
+                            ROS_ERROR("Error processing region at (%d,%d): %s", x, by, e.what());
+                            continue;
+                        }
                     }
-
-                    cv::Rect roi(left, top, right - left + 1, bottom - top + 1);
-                    if (!roi.width || !roi.height) {
-                        ROS_ERROR("Invalid ROI size: %dx%d", roi.width, roi.height);
-                        continue;
-                    }
-
-                    // 检查ROI是否在图像范围内
-                    if ((roi & cv::Rect(0, 0, map_temp_.cols, map_temp_.rows)) != roi) {
-                        ROS_ERROR("ROI outside image boundaries");
-                        continue;
-                    }
-
-                    cv::Mat region = map_temp_(roi);
-
-                    int mask_left = 50 - (x - left);
-                    int mask_top = 50 - (y - top);
-
-                    // 检查mask_roi的有效性
-                    if (mask_left < 0 || mask_top < 0 ||
-                        mask_left + roi.width > gradient_mask.cols ||
-                        mask_top + roi.height > gradient_mask.rows) {
-                        ROS_ERROR("Invalid mask ROI parameters");
-                        continue;
-                    }
-
-                    cv::Rect mask_roi(mask_left, mask_top, roi.width, roi.height);
-                    cv::Mat mask = gradient_mask(mask_roi);
-
-                    cv::max(region, mask, region);
                 }
             }
         }
 
         ROS_INFO("Map processing completed successfully");
+    } catch (const std::bad_alloc& e) {
+        ROS_ERROR("Memory allocation failed: %s", e.what());
     } catch (const cv::Exception& e) {
         ROS_ERROR("OpenCV error in processMap: %s", e.what());
     } catch (const std::exception& e) {
