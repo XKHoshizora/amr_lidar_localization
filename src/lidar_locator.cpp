@@ -200,9 +200,14 @@ void LidarLocator::processLidarData()
             }
 
             // 更新位置和角度
-            lidar_x_ += best_dx;
-            lidar_y_ += best_dy;
-            lidar_yaw_ += best_dyaw;
+            if (max_sum > 0) {  // 只在有效匹配时更新
+                ROS_INFO("Match quality: %d, adjusting pose by dx=%.3f, dy=%.3f, dyaw=%.3f",
+                        max_sum, best_dx, best_dy, best_dyaw);
+
+                lidar_x_ += best_dx;
+                lidar_y_ += best_dy;
+                lidar_yaw_ += best_dyaw;
+            }
 
             ROS_DEBUG_THROTTLE(1.0, "Current pose: x=%.2f, y=%.2f, yaw=%.2f", lidar_x_, lidar_y_, lidar_yaw_);
 
