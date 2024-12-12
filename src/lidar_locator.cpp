@@ -1,4 +1,4 @@
-#include "lidar_locator.h"
+#include <amr_lidar_localization/lidar_locator.h>
 
 LidarLocator::LidarLocator()
     : private_nh_("~")
